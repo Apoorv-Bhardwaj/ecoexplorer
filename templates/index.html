@@ -1,0 +1,302 @@
+<!-- The skeleton of the code here has been generated using ChatGPT3.5. However numerous changes have been made by me, Apoorv -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco-Explorer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #5c5c5c; 
+        }
+        #map {
+            height: 500px;
+            width: 100%;
+            max-width: 1200px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            font-family: 'Roboto', sans-serif;
+            font-size: 36px;
+            color: #0f4d19; <!-- header -->
+            margin: 0;
+        }
+        .form-container {
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 20px;
+        }
+        .form-container form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        .form-container label {
+            font-size: 18px;
+            margin-bottom: 5px;
+            color: #34495e; <!-- not this as well -->
+        }
+        .form-container input,
+        .form-container select,
+        .form-container button {
+            margin-bottom: 15px;
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #bdc3c7; <!-- choose file -->
+        }
+        .form-container input[type="file"] {
+            margin-bottom: 20px;
+        }
+        .form-container button {
+            background-color: #c9c9c9; <!-- this is the color of buttons originally -->
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            transition: background-color 0.3s;
+        }
+        .form-container button:hover {
+            background-color: #e0dede; <!-- color when hovered over  -->
+        }
+        .route-info {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .route-info div {
+            margin: 5px 0;
+            font-size: 18px;
+            color: #34495e;
+        }
+        .directions {
+            margin-top: 20px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #ffffff;
+            border: 1px solid #bdc3c7;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            font-size: 16px;
+            color: #2c3e50;
+        }
+        .selfie-marker {
+            background-color: red;
+            border-radius: 50%;
+            width: 12px;
+            height: 12px;
+            border: 2px solid red;
+        }
+        @media (max-width: 768px) {
+            .form-container {
+                width: 90%;
+            }
+            .header h1 {
+                font-size: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Eco-Explorer</h1>
+        </div>
+
+        <div class="form-container">
+            <!-- Form for Selecting Transport Mode and Getting Route -->
+            <form id="routeForm">
+                <label for="mode">Mode of Transport:</label>
+                <select id="mode" name="mode">
+                    <option value="cycling-regular">Bicycle</option>
+                    <option value="foot-walking">Walking</option>
+                    <option value="driving-car">Public Transport</option>
+                </select>
+                <button type="submit">Get Route</button>
+            </form>
+
+            <!-- Form for Uploading Selfies -->
+            <form id="selfieForm" enctype="multipart/form-data">
+                <label for="selfie">Upload Selfie:</label>
+                <input type="file" id="selfie" name="selfie" accept="image/*" />
+                <button type="submit">Upload Selfie</button>
+            </form>
+        </div>
+
+        <div class="route-info">
+            <div id="eta">ETA: </div>
+            <div id="distance">Distance: </div>
+        </div>
+
+
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        var map = L.map('map').setView([51.505, -0.09], 13);
+        var startCoords;
+        var endCoords;
+        var selfieCoords;
+        var routingControl;
+        var startMarker;
+        var endMarker;
+        var selfieMarker;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+                startCoords = [position.coords.latitude, position.coords.longitude];
+                map.setView(startCoords, 13);
+                if (startMarker) {
+                    map.removeLayer(startMarker);
+                }
+                startMarker = L.marker(startCoords).addTo(map).bindPopup("Your Location").openPopup();
+            }, function() {
+                alert('Geolocation failed');
+            });
+        } else {
+            alert('Geolocation is not supported by this browser');
+        }
+
+        map.on('click', function(e) {
+            if (endMarker) {
+                map.removeLayer(endMarker);
+            }
+            endCoords = [e.latlng.lat, e.latlng.lng];
+            endMarker = L.marker(endCoords).addTo(map).bindPopup("Destination").openPopup();
+        });
+
+        $('#routeForm').on('submit', function(e) {
+            e.preventDefault();
+            var mode = $('#mode').val();
+
+            if (!startCoords || !endCoords) {
+                alert('Please make sure both start and end points are set');
+                return;
+            }
+
+            $.ajax({
+                url: '/api/route',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    start: startCoords,
+                    end: endCoords,
+                    mode: mode
+                }),
+                success: function(response) {
+                    if (routingControl) {
+                        map.removeControl(routingControl);
+                    }
+
+                    var routeCoordinates = response.features[0].geometry.coordinates;
+                    var waypoints = routeCoordinates.map(function(coord) {
+                        return L.latLng(coord[1], coord[0]);
+                    });
+
+                    routingControl = L.Routing.control({
+                        waypoints: waypoints,
+                        routeWhileDragging: false,
+                        createMarker: function() { return null; },
+                        lineOptions: {
+                            styles: [{ color: 'blue', weight: 5 }]
+                        }
+                    }).addTo(map);
+
+                    var routeSummary = response.features[0].properties.segments[0];
+                    $('#eta').text('ETA: ' + (routeSummary.duration / 60).toFixed(2) + ' minutes');
+                    $('#distance').text('Distance: ' + (routeSummary.distance / 1000).toFixed(2) + ' km');
+                    $('#directions').text(response.features[0].properties.instructions.join("\n"));
+
+                    if (selfieCoords) {
+                        if (selfieMarker) {
+                            map.removeLayer(selfieMarker);
+                        }
+                        selfieMarker = L.circleMarker(selfieCoords, {
+                            color: 'red',
+                            radius: 10
+                        }).addTo(map).bindPopup("Selfie Location").openPopup();
+                    }
+                },
+                error: function(error) {
+                    console.error('Error fetching route:', error);
+                }
+            });
+        });
+
+        $('#selfieForm').on('submit', function(e) {
+            e.preventDefault();
+
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by this browser');
+                return;
+            }
+
+            var fileInput = $('#selfie')[0];
+            if (fileInput.files.length === 0) {
+                alert('Please select a selfie to upload.');
+                return;
+            }
+
+            var file = fileInput.files[0];
+            var formData = new FormData();
+            formData.append('selfie', file);
+
+            navigator.geolocation.getCurrentPosition(function(position) {
+                var currentLocation = [position.coords.latitude, position.coords.longitude];
+                formData.append('location', JSON.stringify(currentLocation));
+
+                $.ajax({
+                    url: '/api/upload_selfie',
+                    method: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        alert('Selfie uploaded successfully!');
+                        selfieCoords = currentLocation;
+                        $('#routeForm').submit();
+                    },
+                    error: function(error) {
+                        console.error('Error uploading selfie:', error);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
