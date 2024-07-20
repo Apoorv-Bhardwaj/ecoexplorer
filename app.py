@@ -1,62 +1,50 @@
-from flask import Flask, render_template, request, jsonify
-import requests
-import os
+from flask import Flask, request, jsonify, session, redirect, url_for, render_template
+import json
 
 app = Flask(__name__)
-UPLOAD_FOLDER = 'uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-api_key='5b3ce3597851110001cf6248f956e8f938614f9cbf9f13f2fa33c974' #secret hona chahiye
+app.secret_key = 'your_secret_key'
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+def load_users():
+    with open('users.json', 'r') as file:
+        return json.load(file)
+
+def save_users(users):
+    with open('users.json', 'w') as file:
+        json.dump(users, file, indent=4)
 
 @app.route('/')
-def home():
-    return render_template('index.html')
+def index():
+    if 'username' in session:
+        users = load_users()
+        username = session['username']
+        coins = users.get(username, {}).get('coins', 0)
+        return render_template('index.html', username=username, coins=coins)
+    return redirect(url_for('login'))
 
-@app.route('/api/route', methods=['POST'])
-def route():
-    data = request.json
-    start_coords = data['start']
-    end_coords = data['end']
-    mode = data['mode']
-    url = f'https://api.openrouteservice.org/v2/directions/{mode}'
-    params = {
-        'api_key': api_key,
-        'start': f'{start_coords[1]},{start_coords[0]}',
-        'end': f'{end_coords[1]},{end_coords[0]}'
-    }
+@app.route('/upload_selfie', methods=['POST'])
+def upload_selfie():
+    if 'username' in session:
+        username = session['username']
+        # Handle file upload and location extraction
+        # Update user coins (for example, increment by 10)
+        users = load_users()
+        if username in users:
+            users[username]['coins'] += 10
+            save_users(users)
+            return jsonify(success=True, location={'latitude': 51.505, 'longitude': -0.09}, coins=users[username]['coins'])
+    return jsonify(success=False)
 
-    response = requests.get(url, params=params)
-    route_data = response.json()
-
-    return jsonify(route_data)
-
-@app.route('/api/upload_selfie', methods=['POST'])
-def upload_selfie(): #I will use this function to manage selfies
-    if 'selfie' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-
-    file = request.files['selfie']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-
-    location = request.form.get('location')
-    if not location:
-        return jsonify({'error': 'No location data'}), 400
-
-    filename = file.filename
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-    
-    '''
-    we can use machine learning and AI to handle these selfies
-    '''
-
-    # Save location data
-    with open(os.path.join(app.config['UPLOAD_FOLDER'], 'location_data.txt'), 'a') as f:
-        f.write(f'{filename}: {location}\n')
-
-    return jsonify({'message': 'Selfie uploaded successfully'})
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        users = load_users()
+        if username in users and users[username]['password'] == password:
+            session['username'] = username
+            return redirect(url_for('index'))
+        return 'Invalid credentials', 403
+    return render_template('login.html')
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -1,5 +1,3 @@
-<!-- The skeleton of the code here has been generated using ChatGPT3.5. However numerous changes have been made by me, Apoorv -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,7 +15,8 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            background-color: #5c5c5c; 
+            background-color: #5c5c5c;
+            position: relative;
         }
         #map {
             height: 500px;
@@ -41,12 +40,30 @@
         .header {
             text-align: center;
             margin-bottom: 20px;
+            position: relative;
         }
         .header h1 {
             font-family: 'Roboto', sans-serif;
             font-size: 36px;
-            color: #0f4d19; <!-- header -->
+            color: #0f4d19;
             margin: 0;
+        }
+        .user-info {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background-color: #f1f1f1;
+            padding: 10px 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            font-size: 16px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .user-info .label {
+            font-weight: bold;
         }
         .form-container {
             width: 100%;
@@ -62,7 +79,7 @@
         .form-container label {
             font-size: 18px;
             margin-bottom: 5px;
-            color: #34495e; <!-- not this as well -->
+            color: #34495e;
         }
         .form-container input,
         .form-container select,
@@ -71,13 +88,13 @@
             width: 100%;
             padding: 10px;
             border-radius: 5px;
-            border: 1px solid #bdc3c7; <!-- choose file -->
+            border: 1px solid #bdc3c7;
         }
         .form-container input[type="file"] {
             margin-bottom: 20px;
         }
         .form-container button {
-            background-color: #c9c9c9; <!-- this is the color of buttons originally -->
+            background-color: #c9c9c9;
             color: white;
             border: none;
             cursor: pointer;
@@ -85,7 +102,7 @@
             transition: background-color 0.3s;
         }
         .form-container button:hover {
-            background-color: #e0dede; <!-- color when hovered over  -->
+            background-color: #e0dede;
         }
         .route-info {
             text-align: center;
@@ -126,6 +143,13 @@
     </style>
 </head>
 <body>
+    <div class="user-info">
+        <div class="label">Username:</div>
+        <div id="username">{{ username }}</div>
+        <div class="label">Coins:</div>
+        <div id="coins">{{ coins }}</div>
+    </div>
+
     <div class="container">
         <div class="header">
             <h1>Eco-Explorer</h1>
@@ -155,7 +179,6 @@
             <div id="eta">ETA: </div>
             <div id="distance">Distance: </div>
         </div>
-
 
         <div id="map"></div>
     </div>
@@ -200,101 +223,55 @@
             endMarker = L.marker(endCoords).addTo(map).bindPopup("Destination").openPopup();
         });
 
-        $('#routeForm').on('submit', function(e) {
+        $('#routeForm').submit(function(e) {
             e.preventDefault();
             var mode = $('#mode').val();
-
-            if (!startCoords || !endCoords) {
-                alert('Please make sure both start and end points are set');
-                return;
-            }
-
-            $.ajax({
-                url: '/api/route',
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
+            if (startCoords && endCoords) {
+                $.post('/api/route', {
                     start: startCoords,
                     end: endCoords,
                     mode: mode
-                }),
-                success: function(response) {
+                }, function(data) {
                     if (routingControl) {
                         map.removeControl(routingControl);
                     }
-
-                    var routeCoordinates = response.features[0].geometry.coordinates;
-                    var waypoints = routeCoordinates.map(function(coord) {
-                        return L.latLng(coord[1], coord[0]);
-                    });
-
                     routingControl = L.Routing.control({
-                        waypoints: waypoints,
-                        routeWhileDragging: false,
-                        createMarker: function() { return null; },
-                        lineOptions: {
-                            styles: [{ color: 'blue', weight: 5 }]
-                        }
+                        waypoints: [
+                            L.latLng(startCoords[0], startCoords[1]),
+                            L.latLng(endCoords[0], endCoords[1])
+                        ],
+                        routeWhileDragging: true
                     }).addTo(map);
 
-                    var routeSummary = response.features[0].properties.segments[0];
-                    $('#eta').text('ETA: ' + (routeSummary.duration / 60).toFixed(2) + ' minutes');
-                    $('#distance').text('Distance: ' + (routeSummary.distance / 1000).toFixed(2) + ' km');
-                    $('#directions').text(response.features[0].properties.instructions.join("\n"));
+                    $('#eta').text('ETA: ' + Math.round(data.routes[0].duration / 60) + ' minutes');
+                    $('#distance').text('Distance: ' + Math.round(data.routes[0].distance / 1000) + ' km');
+                });
+            } else {
+                alert('Please select a destination.');
+            }
+        });
 
-                    if (selfieCoords) {
+        $('#selfieForm').submit(function(e) {
+            e.preventDefault();
+            var formData = new FormData(this);
+            $.ajax({
+                url: '/upload_selfie',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
                         if (selfieMarker) {
                             map.removeLayer(selfieMarker);
                         }
-                        selfieMarker = L.circleMarker(selfieCoords, {
-                            color: 'red',
-                            radius: 10
-                        }).addTo(map).bindPopup("Selfie Location").openPopup();
+                        selfieCoords = [response.location.latitude, response.location.longitude];
+                        selfieMarker = L.marker(selfieCoords, { icon: L.divIcon({ className: 'selfie-marker' }) }).addTo(map).bindPopup("Selfie Location").openPopup();
+                        $('#coins').text('Coins: ' + response.coins);
+                    } else {
+                        alert('Selfie upload failed');
                     }
-                },
-                error: function(error) {
-                    console.error('Error fetching route:', error);
                 }
-            });
-        });
-
-        $('#selfieForm').on('submit', function(e) {
-            e.preventDefault();
-
-            if (!navigator.geolocation) {
-                alert('Geolocation is not supported by this browser');
-                return;
-            }
-
-            var fileInput = $('#selfie')[0];
-            if (fileInput.files.length === 0) {
-                alert('Please select a selfie to upload.');
-                return;
-            }
-
-            var file = fileInput.files[0];
-            var formData = new FormData();
-            formData.append('selfie', file);
-
-            navigator.geolocation.getCurrentPosition(function(position) {
-                var currentLocation = [position.coords.latitude, position.coords.longitude];
-                formData.append('location', JSON.stringify(currentLocation));
-
-                $.ajax({
-                    url: '/api/upload_selfie',
-                    method: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    success: function(response) {
-                        alert('Selfie uploaded successfully!');
-                        selfieCoords = currentLocation;
-                        $('#routeForm').submit();
-                    },
-                    error: function(error) {
-                        console.error('Error uploading selfie:', error);
-                    }
-                });
             });
         });
     </script>

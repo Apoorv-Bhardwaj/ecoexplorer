@@ -1,0 +1,10 @@
+{
+    "apoorv": {
+        "password": "test",
+        "coins": 69
+    },
+    "test": {
+        "password": "test",
+        "coins": 50
+    }
+}
