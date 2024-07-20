@@ -15,6 +15,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+			background: url("{{ url_for('static', filename='images/green.jpg') }}") no-repeat center center fixed;
             background-color: #5c5c5c;
             position: relative;
         }
@@ -187,6 +188,14 @@
         .popup button:hover {
             background-color: #c82333;
         }
+		.logo {
+            max-width: 150px;
+        }
+        .banner {
+            width: 100%;
+            max-height: 300px;
+            object-fit: cover;
+        }
         @media (max-width: 768px) {
             .form-container {
                 width: 90%;
@@ -219,9 +228,10 @@
 
     <div class="container">
         <div class="header">
-            <h1>Eco-Explorer</h1>
+			<img src="{{ url_for('static', filename='images/logo.png') }}" alt="Eco-Explorer Logo" class="logo">
+            <h1>Eco-Explorer</h1><br><br>
         </div>
-
+		
         <div class="form-container">
             <!-- Form for Selecting Transport Mode and Getting Route -->
             <form id="routeForm">
@@ -263,6 +273,7 @@
         var endMarker;
         var selfieMarker;
         var timerInterval;
+		var currentLocation = {};
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19
@@ -303,6 +314,20 @@
                     (minutes < 10 ? '0' : '') + minutes + ':' +
                     (seconds < 10 ? '0' : '') + seconds;
             }, 1000);
+        }
+		
+		function getCurrentLocation(callback) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    currentLocation.latitude = position.coords.latitude;
+                    currentLocation.longitude = position.coords.longitude;
+                    callback();
+                }, function() {
+                    alert('Geolocation failed');
+                });
+            } else {
+                alert('Geolocation is not supported by this browser');
+            }
         }
 
         function stopTimer() {
@@ -346,32 +371,43 @@
                 });
             }
         });
+		
+		$(document).ready(function() {
+            $('#selfieForm').submit(function(e) {
+                e.preventDefault();
+                if (startCoords) {  // Ensure we have the current location
+                    var formData = new FormData(this);
+                    formData.append('latitude', startCoords[0]);
+                    formData.append('longitude', startCoords[1]);
+                    $.ajax({
+                        url: '/upload_selfie',
+                        type: 'POST',
+                        data: formData,
+                        contentType: false,
+                        processData: false,
+                        success: function(data) {
+                            if (data.success) {
+                                var selfieLocation = data.location;
+                                if (selfieMarker) {
+                                    map.removeLayer(selfieMarker);
+                                }
+                                selfieMarker = L.marker([selfieLocation.latitude, selfieLocation.longitude], {
+                                    icon: L.divIcon({ className: 'selfie-marker' })
+                                }).addTo(map);
+                                $('#coins').text(data.coins);
 
-        $('#selfieForm').submit(function(e) {
-            e.preventDefault();
-            var formData = new FormData(this);
-            $.ajax({
-                url: '/upload_selfie',
-                type: 'POST',
-                data: formData,
-                contentType: false,
-                processData: false,
-                success: function(data) {
-                    if (data.success) {
-                        var selfieLocation = data.location;
-                        if (selfieMarker) {
-                            map.removeLayer(selfieMarker);
+                                // Display browser alert with message
+                                alert(`Selfie uploaded successfully! You have ${data.coins} coins.`);
+                            } else {
+                                alert('Failed to upload selfie');
+                            }
+                        },
+                        error: function() {
+                            alert('Failed to upload selfie');
                         }
-                        selfieMarker = L.marker([selfieLocation.latitude, selfieLocation.longitude], {
-                            icon: L.divIcon({ className: 'selfie-marker' })
-                        }).addTo(map);
-                        $('#coins').text(data.coins);
-                    } else {
-                        alert('Failed to upload selfie');
-                    }
-                },
-                error: function() {
-                    alert('Failed to upload selfie');
+                    });
+                } else {
+                    alert('Current location not available');
                 }
             });
         });

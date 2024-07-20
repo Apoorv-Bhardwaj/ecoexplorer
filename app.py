@@ -28,18 +28,29 @@ def index():
     else:
         return redirect(url_for('login'))
 
+def save_users(users):
+    with open(DATA_FILE, 'w') as file:
+        json.dump(users, file)
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
+        password = request.form['password']
         users = load_users()
-        if username not in users:
-            users[username] = {'coins': 0, 'selfies': 0}
+        if username in users and users[username]['password'] == password:
+            session['username'] = username
+            session['coins'] = users[username]['coins']
+            return redirect(url_for('index'))
+        elif username not in users:
+            users[username] = {'password': password, 'coins': 0, 'selfies': 0}
             save_users(users)
-        session['username'] = username
-        session['coins'] = users[username]['coins']
-        return redirect(url_for('index'))
+            session['username'] = username
+            session['coins'] = users[username]['coins']
+            return redirect(url_for('index'))
+        else:
+            return "Incorrect password", 401
     return render_template('login.html')
 
 

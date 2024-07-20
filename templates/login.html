@@ -8,12 +8,14 @@
     <style>
         body {
             font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: url("{{ url_for('static', filename='images/background.jpg') }}") no-repeat center center fixed;
+            background-size: cover;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            margin: 0;
-            background-color: #5c5c5c;
         }
         .login-container {
             background-color: white;
@@ -21,14 +23,21 @@
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             text-align: center;
+            max-width: 400px;
+            width: 100%;
         }
         .login-container h1 {
             margin-bottom: 20px;
             font-size: 24px;
             color: #333;
         }
+        .login-container .logo {
+            width: 100px;
+            height: auto;
+            margin-bottom: 20px;
+        }
         .login-container input {
-            width: 100%;
+            width: 90%;
             padding: 10px;
             margin-bottom: 15px;
             border-radius: 5px;
@@ -51,11 +60,12 @@
 </head>
 <body>
     <div class="login-container">
-        <h1>Login</h1>
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Eco-Explorer Logo" class="logo">
+        <h1>Eco-Explorer</h1>
         <form method="POST" action="/login">
             <input type="text" name="username" placeholder="Username" required>
             <input type="password" name="password" placeholder="Password" required>
-            <button type="submit">Login</button>
+            <button type="submit">Login/Signup</button>
         </form>
     </div>
 </body>
