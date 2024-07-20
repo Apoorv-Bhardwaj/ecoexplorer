@@ -132,6 +132,61 @@
             height: 12px;
             border: 2px solid red;
         }
+        .timer {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background-color: #f1f1f1;
+            padding: 10px 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            font-size: 16px;
+            color: #333;
+            display: none; /* Hidden by default */
+        }
+        #finishBtn {
+            display: none; /* Hidden by default */
+            margin: 20px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            border: none;
+            background-color: #28a745;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        #finishBtn:hover {
+            background-color: #218838;
+        }
+        .popup {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+        .popup.show {
+            display: block;
+        }
+        .popup button {
+            display: block;
+            margin-top: 10px;
+            padding: 10px;
+            border: none;
+            background-color: #dc3545;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .popup button:hover {
+            background-color: #c82333;
+        }
         @media (max-width: 768px) {
             .form-container {
                 width: 90%;
@@ -148,6 +203,18 @@
         <div id="username">{{ username }}</div>
         <div class="label">Coins:</div>
         <div id="coins">{{ coins }}</div>
+    </div>
+
+    <div class="timer" id="timer">00:00:00</div>
+    <button id="finishBtn">Finish</button>
+
+    <div id="popup" class="popup">
+        <div id="popupContent">
+            <p>Congratulations!</p>
+            <p id="popupTime">Time Taken: 00:00:00</p>
+            <p id="popupCoins">Coins Gained: 5</p>
+        </div>
+        <button onclick="closePopup()">Close</button>
     </div>
 
     <div class="container">
@@ -195,6 +262,7 @@
         var startMarker;
         var endMarker;
         var selfieMarker;
+        var timerInterval;
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19
@@ -223,31 +291,59 @@
             endMarker = L.marker(endCoords).addTo(map).bindPopup("Destination").openPopup();
         });
 
+        function startTimer() {
+            var startTime = Date.now();
+            timerInterval = setInterval(function() {
+                var elapsedTime = Date.now() - startTime;
+                var hours = Math.floor(elapsedTime / 3600000);
+                var minutes = Math.floor((elapsedTime % 3600000) / 60000);
+                var seconds = Math.floor((elapsedTime % 60000) / 1000);
+                document.getElementById('timer').textContent =
+                    (hours < 10 ? '0' : '') + hours + ':' +
+                    (minutes < 10 ? '0' : '') + minutes + ':' +
+                    (seconds < 10 ? '0' : '') + seconds;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+        }
+
         $('#routeForm').submit(function(e) {
             e.preventDefault();
             var mode = $('#mode').val();
             if (startCoords && endCoords) {
-                $.post('/api/route', {
-                    start: startCoords,
-                    end: endCoords,
-                    mode: mode
-                }, function(data) {
-                    if (routingControl) {
-                        map.removeControl(routingControl);
-                    }
-                    routingControl = L.Routing.control({
-                        waypoints: [
-                            L.latLng(startCoords[0], startCoords[1]),
-                            L.latLng(endCoords[0], endCoords[1])
-                        ],
-                        routeWhileDragging: true
-                    }).addTo(map);
+                startTimer();
+                document.getElementById("timer").style.display = "block";
+                document.getElementById("finishBtn").style.display = "block";
+                $.ajax({
+                    url: '/api/route',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        start: startCoords,
+                        end: endCoords,
+                        mode: mode
+                    }),
+                    success: function(data) {
+                        if (routingControl) {
+                            map.removeControl(routingControl);
+                        }
+                        routingControl = L.Routing.control({
+                            waypoints: [
+                                L.latLng(startCoords[0], startCoords[1]),
+                                L.latLng(endCoords[0], endCoords[1])
+                            ],
+                            routeWhileDragging: true
+                        }).addTo(map);
 
-                    $('#eta').text('ETA: ' + Math.round(data.routes[0].duration / 60) + ' minutes');
-                    $('#distance').text('Distance: ' + Math.round(data.routes[0].distance / 1000) + ' km');
+                        $('#eta').text('ETA: ' + Math.round(data.routes[0].duration / 60) + ' minutes');
+                        $('#distance').text('Distance: ' + Math.round(data.routes[0].distance / 1000) + ' km');
+                    },
+                    error: function() {
+                        alert('Failed to get route');
+                    }
                 });
-            } else {
-                alert('Please select a destination.');
             }
         });
 
@@ -258,22 +354,53 @@
                 url: '/upload_selfie',
                 type: 'POST',
                 data: formData,
-                processData: false,
                 contentType: false,
-                success: function(response) {
-                    if (response.success) {
+                processData: false,
+                success: function(data) {
+                    if (data.success) {
+                        var selfieLocation = data.location;
                         if (selfieMarker) {
                             map.removeLayer(selfieMarker);
                         }
-                        selfieCoords = [response.location.latitude, response.location.longitude];
-                        selfieMarker = L.marker(selfieCoords, { icon: L.divIcon({ className: 'selfie-marker' }) }).addTo(map).bindPopup("Selfie Location").openPopup();
-                        $('#coins').text('Coins: ' + response.coins);
+                        selfieMarker = L.marker([selfieLocation.latitude, selfieLocation.longitude], {
+                            icon: L.divIcon({ className: 'selfie-marker' })
+                        }).addTo(map);
+                        $('#coins').text(data.coins);
                     } else {
-                        alert('Selfie upload failed');
+                        alert('Failed to upload selfie');
                     }
+                },
+                error: function() {
+                    alert('Failed to upload selfie');
                 }
             });
         });
+
+        $('#finishBtn').click(function() {
+            $.ajax({
+                url: '/finish',
+                type: 'POST',
+                success: function(data) {
+                    if (data.success) {
+                        stopTimer();
+                        var totalTime = document.getElementById('timer').textContent;
+                        document.getElementById('popupTime').textContent = 'Time Taken: ' + totalTime;
+                        document.getElementById('popupCoins').textContent = 'Coins Gained: 5';
+                        document.getElementById('popup').classList.add('show');
+                        $('#coins').text(data.coins);
+                    } else {
+                        alert('Failed to finish trip');
+                    }
+                },
+                error: function() {
+                    alert('Failed to finish trip');
+                }
+            });
+        });
+
+        function closePopup() {
+            document.getElementById('popup').classList.remove('show');
+        }
     </script>
 </body>
 </html>
